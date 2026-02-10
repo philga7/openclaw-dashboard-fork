@@ -397,6 +397,9 @@ Server-Sent Events stream of real-time messages.
 ### Sessions Table
 ![Sessions](docs/sessions.png)
 
+### Cost Page
+![Costs](docs/costs.png)
+
 ### Rate Limits
 ![Limits](docs/limits.png)
 
@@ -428,24 +431,21 @@ The dashboard has no build step — edit `server.js` or `index.html` and reload.
 
 - **No comments** in code (self-documenting)
 - **Brief and direct** function names
-- **Tuğcan's style:** clean, minimal, functional
 
 ## 📄 License
 
 MIT License - see [LICENSE](LICENSE) file for details.
 
-Copyright © 2025 Tuğcan Topaloğlu
-
 ## 🙏 Acknowledgments
 
-- Built for [OpenClaw](https://openclaw.dev) by Anthropic
+- Used claude code for built.
+- Built for [OpenClaw](https://openclaw.dev)
 - Inspired by modern dashboards (Grafana, Vercel, Railway)
 - Font: [Inter](https://rsms.me/inter/) & [JetBrains Mono](https://www.jetbrains.com/lp/mono/)
 
 ## 📞 Support
 
 - **Issues:** [GitHub Issues](https://github.com/tugcantopaloglu/openclaw-dashboard/issues)
-- **Email:** topaloglutugcan@gmail.com
 - **Twitter:** [@tugcantopaloglu](https://twitter.com/tugcantopaloglu)
 
 ---
