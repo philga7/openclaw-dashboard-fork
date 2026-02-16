@@ -1171,22 +1171,65 @@ body {
   <div style="max-width:400px;width:90%;background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:40px;box-shadow:0 8px 32px rgba(0,0,0,0.3);">
     <div style="text-align:center;margin-bottom:32px;">
       <div style="font-size:48px;margin-bottom:16px;">🔐</div>
-      <h1 style="font-size:24px;font-weight:700;margin-bottom:8px;background:linear-gradient(135deg, var(--text-primary), var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">Dashboard Login</h1>
-      <p style="color:var(--text-secondary);font-size:14px;" id="loginSubtitle">Enter your access token to continue</p>
+      <h1 style="font-size:24px;font-weight:700;margin-bottom:8px;background:linear-gradient(135deg, var(--text-primary), var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;" id="authTitle">Dashboard Login</h1>
+      <p style="color:var(--text-secondary);font-size:14px;" id="authSubtitle">Enter your credentials</p>
     </div>
-    <form id="loginForm" onsubmit="return handleLogin(event)">
-      <div style="margin-bottom:20px;" id="tokenInputContainer">
-        <input type="password" id="tokenInput" placeholder="Access Token" style="width:100%;padding:14px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:14px;font-family:'JetBrains Mono',monospace;" autocomplete="off" required>
+    
+    <form id="registerForm" style="display:none;" onsubmit="return handleRegister(event)">
+      <div style="margin-bottom:16px;">
+        <input type="text" id="regUsername" placeholder="Username" style="width:100%;padding:14px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:14px;" autocomplete="username" required>
       </div>
-      <div style="margin-bottom:20px;display:none;" id="totpInputContainer">
+      <div style="margin-bottom:16px;">
+        <input type="password" id="regPassword" placeholder="Password" style="width:100%;padding:14px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:14px;" autocomplete="new-password" required minlength="8">
+      </div>
+      <div style="margin-bottom:16px;">
+        <input type="password" id="regPasswordConfirm" placeholder="Confirm Password" style="width:100%;padding:14px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:14px;" autocomplete="new-password" required>
+      </div>
+      <div style="margin-bottom:20px;">
+        <div style="height:6px;background:var(--bg-primary);border-radius:3px;overflow:hidden;">
+          <div id="passwordStrengthBar" style="height:100%;width:0%;transition:all 0.3s;border-radius:3px;"></div>
+        </div>
+        <div id="passwordStrengthText" style="font-size:11px;color:var(--text-muted);margin-top:4px;">Password must be 8+ chars with at least 1 letter and 1 number</div>
+      </div>
+      <div id="registerError" style="display:none;color:var(--red);font-size:13px;margin-bottom:16px;padding:12px;background:rgba(239,68,68,0.1);border-radius:6px;border:1px solid rgba(239,68,68,0.3);"></div>
+      <button type="submit" id="registerBtn" style="width:100%;padding:14px;background:linear-gradient(135deg, var(--accent), var(--purple));color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;transition:all 0.2s;">Create Account</button>
+    </form>
+    
+    <form id="loginForm" style="display:none;" onsubmit="return handleLogin(event)">
+      <div style="margin-bottom:16px;" id="usernameInputContainer">
+        <input type="text" id="username" placeholder="Username" style="width:100%;padding:14px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:14px;" autocomplete="username" required>
+      </div>
+      <div style="margin-bottom:16px;" id="passwordInputContainer">
+        <input type="password" id="password" placeholder="Password" style="width:100%;padding:14px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:14px;" autocomplete="current-password" required>
+      </div>
+      <div style="margin-bottom:16px;display:none;" id="totpInputContainer">
         <input type="text" id="totpInput" placeholder="6-digit code" maxlength="6" pattern="[0-9]{6}" style="width:100%;padding:14px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:14px;font-family:'JetBrains Mono',monospace;text-align:center;letter-spacing:0.5em;" autocomplete="off" inputmode="numeric">
       </div>
-      <div style="margin-bottom:20px;display:flex;align-items:center;gap:8px;">
+      <div style="margin-bottom:16px;display:flex;align-items:center;gap:8px;">
         <input type="checkbox" id="rememberMeCheckbox" style="width:16px;height:16px;cursor:pointer;">
         <label for="rememberMeCheckbox" style="color:var(--text-secondary);font-size:14px;cursor:pointer;">Remember me (3 hours)</label>
       </div>
       <div id="loginError" style="display:none;color:var(--red);font-size:13px;margin-bottom:16px;padding:12px;background:rgba(239,68,68,0.1);border-radius:6px;border:1px solid rgba(239,68,68,0.3);"></div>
       <button type="submit" id="loginBtn" style="width:100%;padding:14px;background:linear-gradient(135deg, var(--accent), var(--purple));color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;transition:all 0.2s;">Login</button>
+      <div style="text-align:center;margin-top:16px;">
+        <a href="#" onclick="showRecoveryForm();return false;" style="color:var(--accent);font-size:13px;text-decoration:none;">Forgot password?</a>
+      </div>
+    </form>
+    
+    <form id="recoveryForm" style="display:none;" onsubmit="return handleRecovery(event)">
+      <div style="margin-bottom:16px;">
+        <input type="text" id="recoveryToken" placeholder="Recovery Token" style="width:100%;padding:14px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:14px;font-family:'JetBrains Mono',monospace;" required>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Check your server console or environment variables</div>
+      </div>
+      <div style="margin-bottom:16px;">
+        <input type="password" id="recoveryNewPassword" placeholder="New Password" style="width:100%;padding:14px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:14px;" required minlength="8">
+      </div>
+      <div style="margin-bottom:20px;">
+        <input type="password" id="recoveryNewPasswordConfirm" placeholder="Confirm New Password" style="width:100%;padding:14px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:14px;" required>
+      </div>
+      <div id="recoveryError" style="display:none;color:var(--red);font-size:13px;margin-bottom:16px;padding:12px;background:rgba(239,68,68,0.1);border-radius:6px;border:1px solid rgba(239,68,68,0.3);"></div>
+      <button type="submit" id="recoveryBtn" style="width:100%;padding:14px;background:linear-gradient(135deg, var(--accent), var(--purple));color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;transition:all 0.2s;margin-bottom:12px;">Reset Password</button>
+      <button type="button" onclick="showLoginForm()" style="width:100%;padding:12px;background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border);border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;">← Back to Login</button>
     </form>
   </div>
 </div>
@@ -1838,7 +1881,33 @@ body {
     <div class="page" id="security">
       <div class="page-header">
         <h1 class="page-title">Security</h1>
-        <p class="page-subtitle">Multi-factor authentication and security settings</p>
+        <p class="page-subtitle">Authentication and security settings</p>
+      </div>
+
+      <div class="card mb-24">
+        <div class="card-title">🔑 Change Password</div>
+        
+        <form onsubmit="return handleChangePassword(event)" style="max-width:500px;">
+          <div style="margin-bottom:16px;">
+            <input type="password" id="currentPassword" placeholder="Current Password" style="width:100%;padding:14px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:14px;" autocomplete="current-password" required>
+          </div>
+          <div style="margin-bottom:16px;">
+            <input type="password" id="newPassword" placeholder="New Password" style="width:100%;padding:14px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:14px;" autocomplete="new-password" required minlength="8">
+          </div>
+          <div style="margin-bottom:20px;">
+            <input type="password" id="newPasswordConfirm" placeholder="Confirm New Password" style="width:100%;padding:14px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-size:14px;" autocomplete="new-password" required>
+          </div>
+          <div id="changePasswordError" style="display:none;color:var(--red);font-size:13px;margin-bottom:16px;padding:12px;background:rgba(239,68,68,0.1);border-radius:6px;border:1px solid rgba(239,68,68,0.3);"></div>
+          <button type="submit" id="changePasswordBtn" style="padding:12px 24px;background:linear-gradient(135deg,var(--accent),var(--purple));color:white;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:14px;">
+            Change Password
+          </button>
+        </form>
+        
+        <div style="margin-top:16px;padding:12px;background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.3);border-radius:8px;">
+          <div style="font-size:12px;color:var(--text-secondary);">
+            <strong>Forgot your password?</strong> Use the recovery token from your server console or environment variables to reset it via the login screen.
+          </div>
+        </div>
       </div>
 
       <div class="card">
@@ -1994,20 +2063,140 @@ function clearStoredToken() {
   sessionStorage.removeItem(TOKEN_EXPIRY_KEY);
 }
 
-async function verifyToken(token) {
-  try {
-    const res = await fetch('/api/auth/verify', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    return res.ok;
-  } catch {
+function showRegistrationForm() {
+  document.getElementById('authTitle').textContent = 'Create Account';
+  document.getElementById('authSubtitle').textContent = 'Set up your dashboard credentials';
+  document.getElementById('registerForm').style.display = 'block';
+  document.getElementById('loginForm').style.display = 'none';
+  document.getElementById('recoveryForm').style.display = 'none';
+  setTimeout(() => document.getElementById('regUsername')?.focus(), 100);
+}
+
+function showLoginForm() {
+  document.getElementById('authTitle').textContent = 'Dashboard Login';
+  document.getElementById('authSubtitle').textContent = 'Enter your credentials';
+  document.getElementById('registerForm').style.display = 'none';
+  document.getElementById('loginForm').style.display = 'block';
+  document.getElementById('recoveryForm').style.display = 'none';
+  document.getElementById('usernameInputContainer').style.display = 'block';
+  document.getElementById('passwordInputContainer').style.display = 'block';
+  document.getElementById('totpInputContainer').style.display = 'none';
+  setTimeout(() => document.getElementById('username')?.focus(), 100);
+}
+
+function showRecoveryForm() {
+  document.getElementById('authTitle').textContent = 'Reset Password';
+  document.getElementById('authSubtitle').textContent = 'Enter recovery token and new password';
+  document.getElementById('registerForm').style.display = 'none';
+  document.getElementById('loginForm').style.display = 'none';
+  document.getElementById('recoveryForm').style.display = 'block';
+  setTimeout(() => document.getElementById('recoveryToken')?.focus(), 100);
+}
+
+function calculatePasswordStrength(password) {
+  let strength = 0;
+  if (password.length >= 8) strength += 25;
+  if (password.length >= 12) strength += 15;
+  if (/[a-z]/.test(password)) strength += 15;
+  if (/[A-Z]/.test(password)) strength += 15;
+  if (/[0-9]/.test(password)) strength += 15;
+  if (/[^a-zA-Z0-9]/.test(password)) strength += 15;
+  return Math.min(strength, 100);
+}
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('DOMContentLoaded', () => {
+    const regPassword = document.getElementById('regPassword');
+    const strengthBar = document.getElementById('passwordStrengthBar');
+    const strengthText = document.getElementById('passwordStrengthText');
+    
+    if (regPassword && strengthBar && strengthText) {
+      regPassword.addEventListener('input', (e) => {
+        const password = e.target.value;
+        const strength = calculatePasswordStrength(password);
+        strengthBar.style.width = strength + '%';
+        
+        if (strength < 40) {
+          strengthBar.style.background = 'var(--red)';
+          strengthText.textContent = 'Weak password';
+          strengthText.style.color = 'var(--red)';
+        } else if (strength < 70) {
+          strengthBar.style.background = 'var(--yellow)';
+          strengthText.textContent = 'Medium strength';
+          strengthText.style.color = 'var(--yellow)';
+        } else {
+          strengthBar.style.background = 'var(--green)';
+          strengthText.textContent = 'Strong password';
+          strengthText.style.color = 'var(--green)';
+        }
+      });
+    }
+  });
+}
+
+async function handleRegister(event) {
+  event.preventDefault();
+  const username = document.getElementById('regUsername').value.trim();
+  const password = document.getElementById('regPassword').value;
+  const confirmPassword = document.getElementById('regPasswordConfirm').value;
+  const registerBtn = document.getElementById('registerBtn');
+  const registerError = document.getElementById('registerError');
+  
+  registerError.style.display = 'none';
+  
+  if (password !== confirmPassword) {
+    registerError.textContent = 'Passwords do not match';
+    registerError.style.display = 'block';
     return false;
   }
+  
+  if (password.length < 8) {
+    registerError.textContent = 'Password must be at least 8 characters';
+    registerError.style.display = 'block';
+    return false;
+  }
+  
+  if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
+    registerError.textContent = 'Password must contain at least 1 letter and 1 number';
+    registerError.style.display = 'block';
+    return false;
+  }
+  
+  registerBtn.disabled = true;
+  registerBtn.textContent = 'Creating account...';
+  
+  try {
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    
+    const data = await res.json();
+    
+    if (res.ok && data.success) {
+      setStoredToken(data.sessionToken, false);
+      showApp();
+    } else {
+      registerError.textContent = data.error || 'Registration failed';
+      registerError.style.display = 'block';
+      registerBtn.disabled = false;
+      registerBtn.textContent = 'Create Account';
+    }
+  } catch (err) {
+    registerError.textContent = 'Network error. Please try again.';
+    registerError.style.display = 'block';
+    registerBtn.disabled = false;
+    registerBtn.textContent = 'Create Account';
+  }
+  
+  return false;
 }
 
 async function handleLogin(event) {
   event.preventDefault();
-  const token = document.getElementById('tokenInput').value.trim();
+  const username = document.getElementById('username').value.trim();
+  const password = document.getElementById('password').value;
   const totpInput = document.getElementById('totpInput');
   const totpCode = totpInput.value.trim();
   const loginBtn = document.getElementById('loginBtn');
@@ -2015,13 +2204,16 @@ async function handleLogin(event) {
   const rememberMe = document.getElementById('rememberMeCheckbox').checked;
   
   loginBtn.disabled = true;
-  loginBtn.textContent = 'Verifying...';
+  loginBtn.textContent = 'Logging in...';
   loginError.style.display = 'none';
   
   try {
-    const body = { token };
+    const body = { username, password };
     if (totpCode) {
       body.totpCode = totpCode;
+    }
+    if (rememberMe) {
+      body.rememberMe = true;
     }
     
     const res = await fetch('/api/auth/login', {
@@ -2033,23 +2225,24 @@ async function handleLogin(event) {
     const data = await res.json();
     
     if (data.requiresMfa) {
-      document.getElementById('loginSubtitle').textContent = 'Enter your 6-digit TOTP code';
-      document.getElementById('tokenInputContainer').style.display = 'none';
+      document.getElementById('authSubtitle').textContent = 'Enter your 6-digit TOTP code';
+      document.getElementById('usernameInputContainer').style.display = 'none';
+      document.getElementById('passwordInputContainer').style.display = 'none';
       document.getElementById('totpInputContainer').style.display = 'block';
       totpInput.focus();
       loginBtn.disabled = false;
       loginBtn.textContent = 'Verify';
-      return;
+      return false;
     }
     
     if (res.ok && data.success) {
-      setStoredToken(token, rememberMe);
+      setStoredToken(data.sessionToken, rememberMe);
       showApp();
     } else {
       if (data.lockoutRemaining) {
         loginError.textContent = `Too many failed attempts. Try again in ${data.lockoutRemaining} seconds.`;
       } else {
-        loginError.textContent = data.error || 'Invalid token';
+        loginError.textContent = data.error || 'Invalid credentials';
       }
       loginError.style.display = 'block';
       loginBtn.disabled = false;
@@ -2066,13 +2259,127 @@ async function handleLogin(event) {
     loginBtn.disabled = false;
     loginBtn.textContent = totpCode ? 'Verify' : 'Login';
   }
+  
+  return false;
 }
 
-function handleLogout() {
-  if (confirm('Are you sure you want to logout?')) {
-    clearStoredToken();
-    location.reload();
+async function handleRecovery(event) {
+  event.preventDefault();
+  const recoveryToken = document.getElementById('recoveryToken').value.trim();
+  const newPassword = document.getElementById('recoveryNewPassword').value;
+  const confirmPassword = document.getElementById('recoveryNewPasswordConfirm').value;
+  const recoveryBtn = document.getElementById('recoveryBtn');
+  const recoveryError = document.getElementById('recoveryError');
+  
+  recoveryError.style.display = 'none';
+  
+  if (newPassword !== confirmPassword) {
+    recoveryError.textContent = 'Passwords do not match';
+    recoveryError.style.display = 'block';
+    return false;
   }
+  
+  if (newPassword.length < 8) {
+    recoveryError.textContent = 'Password must be at least 8 characters';
+    recoveryError.style.display = 'block';
+    return false;
+  }
+  
+  recoveryBtn.disabled = true;
+  recoveryBtn.textContent = 'Resetting password...';
+  
+  try {
+    const res = await fetch('/api/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recoveryToken, newPassword })
+    });
+    
+    const data = await res.json();
+    
+    if (res.ok && data.success) {
+      showToast('Password reset successfully! Please login.', 'success');
+      showLoginForm();
+    } else {
+      recoveryError.textContent = data.error || 'Password reset failed';
+      recoveryError.style.display = 'block';
+      recoveryBtn.disabled = false;
+      recoveryBtn.textContent = 'Reset Password';
+    }
+  } catch (err) {
+    recoveryError.textContent = 'Network error. Please try again.';
+    recoveryError.style.display = 'block';
+    recoveryBtn.disabled = false;
+    recoveryBtn.textContent = 'Reset Password';
+  }
+  
+  return false;
+}
+
+async function handleChangePassword(event) {
+  event.preventDefault();
+  const currentPassword = document.getElementById('currentPassword').value;
+  const newPassword = document.getElementById('newPassword').value;
+  const confirmPassword = document.getElementById('newPasswordConfirm').value;
+  const changePasswordBtn = document.getElementById('changePasswordBtn');
+  const changePasswordError = document.getElementById('changePasswordError');
+  
+  changePasswordError.style.display = 'none';
+  
+  if (newPassword !== confirmPassword) {
+    changePasswordError.textContent = 'New passwords do not match';
+    changePasswordError.style.display = 'block';
+    return false;
+  }
+  
+  if (newPassword.length < 8) {
+    changePasswordError.textContent = 'New password must be at least 8 characters';
+    changePasswordError.style.display = 'block';
+    return false;
+  }
+  
+  changePasswordBtn.disabled = true;
+  changePasswordBtn.textContent = 'Changing password...';
+  
+  try {
+    const res = await authFetch('/api/auth/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword, newPassword })
+    });
+    
+    const data = await res.json();
+    
+    if (res.ok && data.success) {
+      showToast('Password changed successfully! Other sessions have been invalidated.', 'success');
+      document.getElementById('currentPassword').value = '';
+      document.getElementById('newPassword').value = '';
+      document.getElementById('newPasswordConfirm').value = '';
+    } else {
+      changePasswordError.textContent = data.error || 'Password change failed';
+      changePasswordError.style.display = 'block';
+    }
+  } catch (err) {
+    changePasswordError.textContent = err.message || 'Network error. Please try again.';
+    changePasswordError.style.display = 'block';
+  } finally {
+    changePasswordBtn.disabled = false;
+    changePasswordBtn.textContent = 'Change Password';
+  }
+  
+  return false;
+}
+
+async function handleLogout() {
+  if (!confirm('Are you sure you want to logout?')) return;
+  
+  try {
+    await authFetch('/api/auth/logout', { method: 'POST' });
+  } catch (e) {
+  }
+  
+  clearStoredToken();
+  location.reload();
 }
 
 function showApp() {
@@ -2099,21 +2406,37 @@ function showApp() {
 function showLogin() {
   document.getElementById('loginPage').style.display = 'flex';
   document.getElementById('mainApp').style.display = 'none';
-  document.getElementById('tokenInput').focus();
 }
 
 async function checkAuth() {
-  const token = getStoredToken();
-  if (!token) {
+  try {
+    const statusRes = await fetch('/api/auth/status');
+    const statusData = await statusRes.json();
+    
+    const token = getStoredToken();
+    
+    if (token) {
+      const verifyRes = await fetch('/api/auth/verify', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (verifyRes.ok) {
+        showApp();
+        return;
+      } else {
+        clearStoredToken();
+      }
+    }
+    
+    if (statusData.registered === false) {
+      showRegistrationForm();
+    } else {
+      showLoginForm();
+    }
+    
     showLogin();
-    return;
-  }
-  
-  const valid = await verifyToken(token);
-  if (valid) {
-    showApp();
-  } else {
-    clearStoredToken();
+  } catch (err) {
+    showLoginForm();
     showLogin();
   }
 }
