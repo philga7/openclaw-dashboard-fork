@@ -17,6 +17,7 @@ const memoryMdPath = path.join(WORKSPACE_DIR, 'MEMORY.md');
 const heartbeatPath = path.join(WORKSPACE_DIR, 'HEARTBEAT.md');
 const healthHistoryFile = path.join(dataDir, 'health-history.json');
 const auditLogPath = '/root/clawd/data/audit.log';
+const credentialsFile = '/root/clawd/data/credentials.json';
 const mfaSecretFile = '/root/clawd/data/mfa-secret.txt';
 
 const skillsDir = path.join(WORKSPACE_DIR, 'skills');
@@ -32,27 +33,86 @@ const htmlPath = path.join(__dirname, 'index.html');
 
 try { fs.mkdirSync(dataDir, { recursive: true }); } catch {}
 try { fs.mkdirSync(path.dirname(auditLogPath), { recursive: true }); } catch {}
+try { fs.mkdirSync(path.dirname(credentialsFile), { recursive: true }); } catch {}
 
 let DASHBOARD_TOKEN = process.env.DASHBOARD_TOKEN;
 if (!DASHBOARD_TOKEN) {
   DASHBOARD_TOKEN = crypto.randomBytes(16).toString('hex');
-  console.log('');
-  console.log('═══════════════════════════════════════════════════════════');
-  console.log('  🔐 DASHBOARD TOKEN (auto-generated)');
-  console.log('═══════════════════════════════════════════════════════════');
-  console.log('');
-  console.log('  ' + DASHBOARD_TOKEN);
-  console.log('');
-  console.log('  Set DASHBOARD_TOKEN env variable to use a custom token.');
-  console.log('═══════════════════════════════════════════════════════════');
-  console.log('');
 }
+
+console.log('');
+console.log('═══════════════════════════════════════════════════════════');
+console.log('  🔐 Recovery Token');
+console.log('═══════════════════════════════════════════════════════════');
+console.log('');
+console.log('  ' + DASHBOARD_TOKEN);
+console.log('');
+console.log('  Use this token to reset your password if forgotten.');
+console.log('  Set DASHBOARD_TOKEN env variable for a custom token.');
+console.log('═══════════════════════════════════════════════════════════');
+console.log('');
 
 let MFA_SECRET = process.env.DASHBOARD_MFA_SECRET;
 if (!MFA_SECRET && fs.existsSync(mfaSecretFile)) {
   try {
     MFA_SECRET = fs.readFileSync(mfaSecretFile, 'utf8').trim();
   } catch {}
+}
+
+const sessions = new Map();
+const SESSION_ACTIVITY_TIMEOUT = 30 * 60 * 1000;
+const SESSION_REMEMBER_LIFETIME = 3 * 60 * 60 * 1000;
+
+function hashPassword(password, salt) {
+  if (!salt) salt = crypto.randomBytes(32).toString('hex');
+  const hash = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
+  return { hash, salt };
+}
+
+function verifyPassword(password, hash, salt) {
+  const result = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
+  return crypto.timingSafeEqual(Buffer.from(result), Buffer.from(hash));
+}
+
+function getCredentials() {
+  try {
+    if (!fs.existsSync(credentialsFile)) return null;
+    return JSON.parse(fs.readFileSync(credentialsFile, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function saveCredentials(creds) {
+  const tmp = credentialsFile + '.tmp.' + Date.now();
+  fs.writeFileSync(tmp, JSON.stringify(creds, null, 2), 'utf8');
+  fs.renameSync(tmp, credentialsFile);
+}
+
+function generateSessionToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+function createSession(username, ip, rememberMe = false) {
+  const token = generateSessionToken();
+  const now = Date.now();
+  const expiresAt = now + (rememberMe ? SESSION_REMEMBER_LIFETIME : SESSION_ACTIVITY_TIMEOUT);
+  sessions.set(token, {
+    username,
+    ip,
+    createdAt: now,
+    lastActivity: now,
+    expiresAt,
+    rememberMe
+  });
+  return token;
+}
+
+function validatePassword(password) {
+  if (password.length < 8) return 'Password must be at least 8 characters';
+  if (!/[a-zA-Z]/.test(password)) return 'Password must contain at least 1 letter';
+  if (!/\d/.test(password)) return 'Password must contain at least 1 number';
+  return null;
 }
 
 function safeCompare(a, b) {
@@ -141,8 +201,6 @@ function setSecurityHeaders(res) {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-XSS-Protection', '1; mode=block');
-  // unsafe-inline is required because the dashboard uses a single-file architecture (index.html with inline scripts).
-  // If the architecture changes to separate JS files, remove 'unsafe-inline' from both script-src and default-src.
   res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; font-src 'self' https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com");
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
@@ -192,16 +250,50 @@ function getClientIP(req) {
   return req.socket.remoteAddress || 'unknown';
 }
 
+function isLocalhost(ip) {
+  return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+}
+
+function httpsEnforcement(req, res) {
+  if (process.env.DASHBOARD_ALLOW_HTTP === 'true') return true;
+  const ip = getClientIP(req);
+  if (isLocalhost(ip)) return true;
+  if (req.socket.encrypted || req.headers['x-forwarded-proto'] === 'https') return true;
+  setSecurityHeaders(res);
+  res.writeHead(403, { 'Content-Type': 'text/plain' });
+  res.end('HTTPS required. Access via localhost or enable HTTPS.');
+  return false;
+}
+
 function isAuthenticated(req) {
   const authHeader = req.headers.authorization;
+  let token = null;
   if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.substring(7);
-    return safeCompare(token, DASHBOARD_TOKEN);
+    token = authHeader.substring(7);
+  } else {
+    const url = new URL(req.url, 'http://localhost');
+    token = url.searchParams.get('token');
   }
-  const url = new URL(req.url, 'http://localhost');
-  const tokenParam = url.searchParams.get('token');
-  if (!tokenParam) return false;
-  return safeCompare(tokenParam, DASHBOARD_TOKEN);
+  if (!token) return false;
+  
+  const session = sessions.get(token);
+  if (!session) return false;
+  
+  const now = Date.now();
+  if (now > session.expiresAt) {
+    sessions.delete(token);
+    return false;
+  }
+  
+  if (!session.rememberMe) {
+    if (now - session.lastActivity > SESSION_ACTIVITY_TIMEOUT) {
+      sessions.delete(token);
+      return false;
+    }
+    session.lastActivity = now;
+  }
+  
+  return true;
 }
 
 function requireAuth(req, res) {
@@ -1194,7 +1286,19 @@ function saveHealthSnapshot() {
 setInterval(saveHealthSnapshot, 5 * 60 * 1000);
 saveHealthSnapshot();
 
+setInterval(() => {
+  const now = Date.now();
+  for (const [token, sess] of sessions.entries()) {
+    if (now > sess.expiresAt) {
+      sessions.delete(token);
+    } else if (!sess.rememberMe && now - sess.lastActivity > SESSION_ACTIVITY_TIMEOUT) {
+      sessions.delete(token);
+    }
+  }
+}, 60 * 1000);
+
 const server = http.createServer((req, res) => {
+  if (!httpsEnforcement(req, res)) return;
   setSecurityHeaders(res);
   const ip = getClientIP(req);
 
@@ -1208,18 +1312,57 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  if (req.url === '/api/auth/verify') {
-    if (isAuthenticated(req)) {
-      setSameSiteCORS(req, res);
-      auditLog('auth_verify_success', ip);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ valid: true }));
-    } else {
-      recordFailedAuth(ip);
-      auditLog('auth_verify_failed', ip);
-      res.writeHead(401, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ valid: false }));
+  if (req.url === '/api/auth/status') {
+    const creds = getCredentials();
+    const registered = !!creds;
+    const loggedIn = isAuthenticated(req);
+    setSameSiteCORS(req, res);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ registered, loggedIn }));
+    return;
+  }
+
+  if (req.url === '/api/auth/register' && req.method === 'POST') {
+    const creds = getCredentials();
+    if (creds) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Already registered' }));
+      return;
     }
+
+    let body = '';
+    req.on('data', chunk => { body += chunk; if (body.length > 2048) req.destroy(); });
+    req.on('end', () => {
+      try {
+        const { username, password } = JSON.parse(body);
+        if (!username || !password) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Username and password required' }));
+          return;
+        }
+
+        const pwdError = validatePassword(password);
+        if (pwdError) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: pwdError }));
+          return;
+        }
+
+        const { hash, salt } = hashPassword(password);
+        const newCreds = { username, passwordHash: hash, salt, iterations: 100000 };
+        saveCredentials(newCreds);
+
+        const sessionToken = createSession(username, ip, false);
+        clearFailedAuth(ip);
+        auditLog('register', ip, { username });
+        setSameSiteCORS(req, res);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, sessionToken }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Bad request' }));
+      }
+    });
     return;
   }
 
@@ -1233,38 +1376,171 @@ const server = http.createServer((req, res) => {
     }
 
     let body = '';
-    req.on('data', chunk => { body += chunk; if (body.length > 1024) req.destroy(); });
+    req.on('data', chunk => { body += chunk; if (body.length > 2048) req.destroy(); });
     req.on('end', () => {
       try {
-        const { token, totpCode } = JSON.parse(body);
-        if (!safeCompare(token, DASHBOARD_TOKEN)) {
+        const { username, password, totpCode, rememberMe } = JSON.parse(body);
+        const creds = getCredentials();
+        if (!creds) {
           recordFailedAuth(ip);
-          auditLog('login_failed', ip);
           res.writeHead(401, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Invalid token' }));
+          res.end(JSON.stringify({ error: 'No account registered' }));
           return;
         }
-        
-        if (MFA_SECRET) {
+
+        if (username !== creds.username) {
+          recordFailedAuth(ip);
+          auditLog('login_failed', ip, { username });
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid username or password' }));
+          return;
+        }
+
+        if (!verifyPassword(password, creds.passwordHash, creds.salt)) {
+          recordFailedAuth(ip);
+          auditLog('login_failed', ip, { username });
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid username or password' }));
+          return;
+        }
+
+        if (MFA_SECRET || creds.mfaSecret) {
+          const secret = creds.mfaSecret || MFA_SECRET;
           if (!totpCode) {
             setSameSiteCORS(req, res);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ requiresMfa: true }));
             return;
           }
-          
-          if (!verifyTOTP(MFA_SECRET, totpCode)) {
+
+          if (!verifyTOTP(secret, totpCode)) {
             recordFailedAuth(ip);
-            auditLog('login_mfa_failed', ip);
+            auditLog('login_mfa_failed', ip, { username });
             res.writeHead(401, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Invalid TOTP code' }));
             return;
           }
         }
-        
+
+        const sessionToken = createSession(username, ip, rememberMe);
         clearFailedAuth(ip);
-        auditLog('login_success', ip);
+        auditLog('login_success', ip, { username });
         setSameSiteCORS(req, res);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, sessionToken }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Bad request' }));
+      }
+    });
+    return;
+  }
+
+  if (req.url === '/api/auth/logout' && req.method === 'POST') {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      sessions.delete(token);
+    }
+    auditLog('logout', ip);
+    setSameSiteCORS(req, res);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true }));
+    return;
+  }
+
+  if (req.url === '/api/auth/reset-password' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; if (body.length > 2048) req.destroy(); });
+    req.on('end', () => {
+      try {
+        const { recoveryToken, newPassword } = JSON.parse(body);
+        if (!safeCompare(recoveryToken, DASHBOARD_TOKEN)) {
+          recordFailedAuth(ip);
+          auditLog('password_reset_failed', ip);
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid recovery token' }));
+          return;
+        }
+
+        const pwdError = validatePassword(newPassword);
+        if (pwdError) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: pwdError }));
+          return;
+        }
+
+        const creds = getCredentials();
+        if (!creds) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'No account registered' }));
+          return;
+        }
+
+        const { hash, salt } = hashPassword(newPassword);
+        creds.passwordHash = hash;
+        creds.salt = salt;
+        saveCredentials(creds);
+
+        sessions.clear();
+
+        clearFailedAuth(ip);
+        auditLog('password_reset_success', ip);
+        setSameSiteCORS(req, res);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Bad request' }));
+      }
+    });
+    return;
+  }
+
+  if (req.url === '/api/auth/change-password' && req.method === 'POST') {
+    if (!requireAuth(req, res)) return;
+    setSameSiteCORS(req, res);
+
+    let body = '';
+    req.on('data', chunk => { body += chunk; if (body.length > 2048) req.destroy(); });
+    req.on('end', () => {
+      try {
+        const { currentPassword, newPassword } = JSON.parse(body);
+        const creds = getCredentials();
+        if (!creds) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'No account registered' }));
+          return;
+        }
+
+        if (!verifyPassword(currentPassword, creds.passwordHash, creds.salt)) {
+          recordFailedAuth(ip);
+          auditLog('password_change_failed', ip);
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Current password is incorrect' }));
+          return;
+        }
+
+        const pwdError = validatePassword(newPassword);
+        if (pwdError) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: pwdError }));
+          return;
+        }
+
+        const { hash, salt } = hashPassword(newPassword);
+        creds.passwordHash = hash;
+        creds.salt = salt;
+        saveCredentials(creds);
+
+        const authHeader = req.headers.authorization;
+        const currentToken = authHeader ? authHeader.substring(7) : null;
+        for (const [token, sess] of sessions.entries()) {
+          if (token !== currentToken) sessions.delete(token);
+        }
+
+        clearFailedAuth(ip);
+        auditLog('password_change_success', ip);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true }));
       } catch (e) {
@@ -1278,8 +1554,10 @@ const server = http.createServer((req, res) => {
   if (req.url === '/api/auth/mfa-status') {
     if (!requireAuth(req, res)) return;
     setSameSiteCORS(req, res);
+    const creds = getCredentials();
+    const enabled = !!(creds?.mfaSecret || MFA_SECRET);
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ enabled: !!MFA_SECRET }));
+    res.end(JSON.stringify({ enabled }));
     return;
   }
 
@@ -1291,8 +1569,11 @@ const server = http.createServer((req, res) => {
       const secret = base32Encode(crypto.randomBytes(20));
       const otpauth_uri = `otpauth://totp/OpenClaw%20Dashboard?secret=${secret}&issuer=OpenClaw`;
       
-      fs.writeFileSync(mfaSecretFile, secret, 'utf8');
-      MFA_SECRET = secret;
+      const creds = getCredentials();
+      if (creds) {
+        creds.mfaSecret = secret;
+        saveCredentials(creds);
+      }
       
       auditLog('mfa_setup', getClientIP(req));
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -1314,23 +1595,26 @@ const server = http.createServer((req, res) => {
       try {
         const { totpCode } = JSON.parse(body);
         
-        if (!MFA_SECRET) {
+        const creds = getCredentials();
+        const mfaSecret = creds?.mfaSecret || MFA_SECRET;
+        
+        if (!mfaSecret) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'MFA is not enabled' }));
           return;
         }
         
-        if (!totpCode || !verifyTOTP(MFA_SECRET, totpCode)) {
+        if (!totpCode || !verifyTOTP(mfaSecret, totpCode)) {
           auditLog('mfa_disable_failed', getClientIP(req));
           res.writeHead(401, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Invalid TOTP code' }));
           return;
         }
         
-        if (fs.existsSync(mfaSecretFile)) {
-          fs.unlinkSync(mfaSecretFile);
+        if (creds) {
+          delete creds.mfaSecret;
+          saveCredentials(creds);
         }
-        MFA_SECRET = null;
         
         auditLog('mfa_disabled', getClientIP(req));
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -1515,7 +1799,6 @@ const server = http.createServer((req, res) => {
       }
       return;
     }
-    // DESTRUCTIVE ACTION: restarts the OpenClaw gateway service. Frontend should show confirmation dialog.
     if (req.url === '/api/action/restart-openclaw' && req.method === 'POST') {
       try {
         auditLog('action_restart_openclaw', ip);
@@ -1594,7 +1877,6 @@ const server = http.createServer((req, res) => {
       });
       return;
     }
-    // DESTRUCTIVE ACTION: runs apt upgrade on the system. Frontend should show confirmation dialog.
     if (req.url === '/api/action/sys-update' && req.method === 'POST') {
       auditLog('action_sys_update', ip);
       exec('apt update -qq && apt upgrade -y -qq 2>&1 | tail -5', { timeout: 300000 }, (err, stdout) => {
@@ -1844,9 +2126,6 @@ const server = http.createServer((req, res) => {
       }
       return;
     }
-    // SECURITY NOTE: SSE endpoint accepts token via URL query param because EventSource API
-    // doesn't support custom headers. Token may appear in server logs and browser history.
-    // Mitigated by stripping token from audit logs below.
     if (req.url === '/api/live' || req.url.startsWith('/api/live?')) {
       res.writeHead(200, {
         'Content-Type': 'text/event-stream',
