@@ -8,6 +8,16 @@ A beautiful, secure, real-time monitoring dashboard for OpenClaw agents. Track s
 
 ![Dashboard Preview](docs/screenshot.png)
 
+## 📸 Screenshots
+
+| Overview | Sessions | Costs |
+|----------|----------|-------|
+| ![Overview](docs/overview.png) | ![Sessions](docs/sessions.png) | ![Costs](docs/costs.png) |
+
+| Rate Limits | Live Feed | Logs |
+|-------------|-----------|------|
+| ![Limits](docs/limits.png) | ![Feed](docs/feed.png) | ![Logs](docs/logs.png) |
+
 ## ✨ Features
 
 - 🤖 **Session Management** - View all agent sessions with real-time activity status
