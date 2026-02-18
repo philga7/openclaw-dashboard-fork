@@ -2231,6 +2231,6 @@ const server = http.createServer((req, res) => {
   }
 });
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log('Dashboard: http://0.0.0.0:' + PORT);
+server.listen(PORT, '127.0.0.1', () => {
+  console.log('Dashboard: http://127.0.0.1:' + PORT);
 });
